@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: crude-oil-forecast
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn backend.app:app --workers 1 --timeout 120 --bind 0.0.0.0:$PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+    disk:
+      name: models-disk
+      mountPath: /opt/render/project/src/models
+      sizeGB: 1

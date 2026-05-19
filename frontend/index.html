@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WTI Crude Oil Forecast</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0b0e13;
+    --surface: #131820;
+    --surface2: #1a2130;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.13);
+    --text: #e8edf5;
+    --muted: #6b7a90;
+    --accent: #f59e0b;
+    --accent2: #10b981;
+    --danger: #ef4444;
+    --mono: 'Space Mono', monospace;
+    --sans: 'DM Sans', sans-serif;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* grid bg */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(245,158,11,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(245,158,11,0.03) 1px, transparent 1px);
+    background-size: 48px 48px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem; position: relative; z-index: 1; }
+
+  /* header */
+  header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 2.5rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+  .logo-row { display: flex; align-items: center; gap: 12px; }
+  .logo-mark {
+    width: 40px; height: 40px;
+    border: 1.5px solid var(--accent);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent);
+    letter-spacing: -1px;
+    flex-shrink: 0;
+  }
+  h1 {
+    font-family: var(--mono);
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: var(--text);
+    line-height: 1.2;
+  }
+  h1 span { display: block; font-size: 0.7rem; font-weight: 400; color: var(--muted); letter-spacing: 0.12em; margin-top: 2px; text-transform: uppercase; }
+
+  .status-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 20px;
+    padding: 6px 14px;
+    font-size: 12px;
+    color: var(--muted);
+    font-family: var(--mono);
+  }
+  .source-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 20px;
+    padding: 5px 12px;
+    font-size: 11px;
+    color: var(--muted);
+    font-family: var(--mono);
+    transition: border-color 0.3s, color 0.3s;
+  }
+  .source-pill.fallback { border-color: rgba(245,158,11,0.4); color: var(--accent); }
+  .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--muted);
+    animation: pulse 2s infinite;
+  }
+  .dot.live { background: var(--accent2); }
+  .dot.error { background: var(--danger); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* metric cards */
+  .metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+    margin-bottom: 1.5rem;
+  }
+  .metric-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1rem 1.2rem;
+    transition: border-color 0.2s;
+  }
+  .metric-card:hover { border-color: var(--border2); }
+  .metric-label {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-family: var(--mono);
+    margin-bottom: 6px;
+  }
+  .metric-value {
+    font-family: var(--mono);
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1;
+  }
+  .metric-value.up { color: var(--accent2); }
+  .metric-value.down { color: var(--danger); }
+  .metric-sub {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  /* chart section */
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+  .chart-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+  .chart-title {
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: var(--text);
+  }
+  .chart-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  .tag {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 3px 10px;
+    border-radius: 4px;
+    border: 1px solid;
+    letter-spacing: 0.06em;
+  }
+  .tag-amber { color: var(--accent); border-color: rgba(245,158,11,0.3); background: rgba(245,158,11,0.06); }
+  .tag-green { color: var(--accent2); border-color: rgba(16,185,129,0.3); background: rgba(16,185,129,0.06); }
+
+  .chart-wrap { position: relative; width: 100%; height: 300px; }
+
+  /* forecast table */
+  .table-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 1.5rem;
+  }
+  .table-header {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    padding: 10px 1.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 11px 1.5rem;
+    font-size: 13px;
+    border-bottom: 1px solid var(--border);
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--surface2); }
+  .mono { font-family: var(--mono); font-size: 13px; }
+  .change-up { color: var(--accent2); }
+  .change-down { color: var(--danger); }
+  .day-badge {
+    display: inline-block;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  /* model metrics table */
+  .model-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    margin-bottom: 1.5rem;
+  }
+  .model-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1rem 1.2rem;
+  }
+  .model-name {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    margin-bottom: 10px;
+    text-transform: uppercase;
+  }
+  .model-metric-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+  }
+  .model-metric-row:last-child { border-bottom: none; }
+  .model-metric-key { color: var(--muted); font-family: var(--mono); font-size: 11px; }
+  .model-metric-val { font-family: var(--mono); color: var(--text); }
+
+  /* refresh button */
+  .btn-refresh {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: transparent;
+    border: 1px solid var(--border2);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 8px 18px;
+    border-radius: 6px;
+    cursor: pointer;
+    letter-spacing: 0.05em;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .btn-refresh:hover { background: var(--surface2); border-color: var(--accent); color: var(--accent); }
+  .btn-refresh:disabled { opacity: 0.4; cursor: not-allowed; }
+  .spin { display: inline-block; }
+  .spinning { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* error/empty states */
+  .empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--muted);
+    font-size: 13px;
+    font-family: var(--mono);
+  }
+  .error-banner {
+    background: rgba(239,68,68,0.08);
+    border: 1px solid rgba(239,68,68,0.25);
+    border-radius: 8px;
+    padding: 1rem 1.5rem;
+    color: #fca5a5;
+    font-size: 13px;
+    margin-bottom: 1.5rem;
+    display: none;
+  }
+
+  footer {
+    text-align: center;
+    padding: 2rem 0 1rem;
+    font-size: 11px;
+    color: var(--muted);
+    font-family: var(--mono);
+    letter-spacing: 0.05em;
+  }
+
+  @media (max-width: 600px) {
+    .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+    th, td { padding-left: 1rem; padding-right: 1rem; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="logo-row">
+      <div class="logo-mark">WTI</div>
+      <div>
+        <h1>Crude Oil Forecast<span>Ensemble ML · 10-Day Outlook</span></h1>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <div class="status-pill">
+        <span class="dot" id="status-dot"></span>
+        <span id="status-text">connecting…</span>
+      </div>
+      <div class="source-pill" id="source-pill" style="display:none;">
+        <span id="source-icon">◉</span>
+        <span id="source-text"></span>
+      </div>
+      <button class="btn-refresh" id="btn-refresh" onclick="loadAll()">
+        <span class="spin" id="spin-icon">↻</span> Refresh
+      </button>
+    </div>
+  </header>
+
+  <div class="error-banner" id="error-banner"></div>
+
+  <!-- summary metrics -->
+  <div class="metrics-grid">
+    <div class="metric-card">
+      <div class="metric-label">Last Price</div>
+      <div class="metric-value" id="m-last">—</div>
+      <div class="metric-sub">$/barrel (live)</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Day 1 Forecast</div>
+      <div class="metric-value" id="m-d1">—</div>
+      <div class="metric-sub" id="m-d1-date">—</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">10-Day Range</div>
+      <div class="metric-value" id="m-range">—</div>
+      <div class="metric-sub">Low → High</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">10-Day Change</div>
+      <div class="metric-value" id="m-change">—</div>
+      <div class="metric-sub">vs last actual</div>
+    </div>
+  </div>
+
+  <!-- main chart -->
+  <div class="chart-card">
+    <div class="chart-header">
+      <div>
+        <div class="chart-title">10-DAY PRICE FORECAST</div>
+        <div class="chart-sub" id="chart-model-label">Loading model…</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <span class="tag tag-amber">▲ Forecast</span>
+        <span class="tag tag-green">● Actual</span>
+      </div>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="forecastChart" role="img" aria-label="10-day WTI crude oil price forecast chart">
+        Loading forecast data…
+      </canvas>
+    </div>
+  </div>
+
+  <!-- forecast table -->
+  <div class="table-card">
+    <div class="table-header">
+      <div>
+        <div class="chart-title">DAILY BREAKDOWN</div>
+        <div class="chart-sub">Next 10 trading days</div>
+      </div>
+      <div id="gen-time" style="font-size:11px;color:var(--muted);font-family:var(--mono);"></div>
+    </div>
+    <div id="table-body">
+      <div class="empty-state">Fetching forecast…</div>
+    </div>
+  </div>
+
+  <!-- model performance -->
+  <div class="chart-card">
+    <div class="chart-header">
+      <div>
+        <div class="chart-title">MODEL PERFORMANCE</div>
+        <div class="chart-sub">Test set evaluation metrics</div>
+      </div>
+    </div>
+    <div id="metrics-body">
+      <div class="empty-state">Loading metrics…</div>
+    </div>
+    <div style="margin-top:1.5rem;">
+      <div class="chart-wrap" style="height:240px;">
+        <canvas id="metricsChart" role="img" aria-label="Model comparison bar chart showing MAE for each model">
+          Loading model comparison…
+        </canvas>
+      </div>
+    </div>
+  </div>
+
+  <footer>WTI CRUDE OIL FORECAST · LSTM + CNN + LIGHTGBM + RIDGE ENSEMBLE · DATA VIA YAHOO FINANCE</footer>
+
+</div>
+
+<script>
+const API = window.location.origin;
+let forecastChart, metricsChart;
+
+function setStatus(state, text) {
+  const dot = document.getElementById('status-dot');
+  const txt = document.getElementById('status-text');
+  dot.className = 'dot' + (state === 'live' ? ' live' : state === 'error' ? ' error' : '');
+  txt.textContent = text;
+}
+
+function showError(msg) {
+  const b = document.getElementById('error-banner');
+  b.textContent = '⚠ ' + msg;
+  b.style.display = 'block';
+  setTimeout(() => b.style.display = 'none', 8000);
+}
+
+function fmtPrice(p) { return '$' + Number(p).toFixed(2); }
+function fmtDate(s) {
+  const d = new Date(s + 'T00:00:00');
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+function dayLabel(i) {
+  const s = ['1st','2nd','3rd','4th','5th','6th','7th','8th','9th','10th'];
+  return s[i] || `Day ${i+1}`;
+}
+
+async function loadForecast() {
+  const res = await fetch(API + '/api/forecast/auto');
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+async function loadMetrics() {
+  const res = await fetch(API + '/api/metrics');
+  if (!res.ok) return null;
+  return res.json();
+}
+
+function renderSummary(data) {
+  const last = data.last_actual;
+  const d1   = data.prices[0];
+  const all  = data.prices;
+  const low  = Math.min(...all), high = Math.max(...all);
+  const chg  = ((all[all.length-1] - last) / last * 100);
+
+  document.getElementById('m-last').textContent = fmtPrice(last);
+  const d1el = document.getElementById('m-d1');
+  d1el.textContent = fmtPrice(d1);
+  d1el.className = 'metric-value' + (d1 >= last ? ' up' : ' down');
+  document.getElementById('m-d1-date').textContent = fmtDate(data.dates[0]);
+  document.getElementById('m-range').textContent = fmtPrice(low) + ' – ' + fmtPrice(high);
+  const chgEl = document.getElementById('m-change');
+  chgEl.textContent = (chg >= 0 ? '+' : '') + chg.toFixed(2) + '%';
+  chgEl.className = 'metric-value' + (chg >= 0 ? ' up' : ' down');
+  document.getElementById('chart-model-label').textContent = data.model;
+  const gt = new Date(data.generated_at);
+  document.getElementById('gen-time').textContent = 'Generated ' + gt.toUTCString().slice(0,25);
+
+  // Show data source pill
+  const src = data.source || 'Unknown source';
+  const pill = document.getElementById('source-pill');
+  const srcText = document.getElementById('source-text');
+  const srcIcon = document.getElementById('source-icon');
+  const isFallback = !src.toLowerCase().includes('yahoo') && !src.toLowerCase().includes('stooq') && !src.toLowerCase().includes('alpha');
+  pill.style.display = 'inline-flex';
+  pill.className = 'source-pill' + (isFallback ? ' fallback' : '');
+  srcIcon.textContent = isFallback ? '⚠' : '◉';
+  srcText.textContent = 'Data: ' + src;
+}
+
+function renderChart(data) {
+  const ctx = document.getElementById('forecastChart').getContext('2d');
+  if (forecastChart) forecastChart.destroy();
+
+  const last = data.last_actual;
+  const labels = ['Now', ...data.dates.map(fmtDate)];
+  const actuals = [last, ...Array(data.prices.length).fill(null)];
+  const forecasts = [last, ...data.prices];
+
+  forecastChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Forecast',
+          data: forecasts,
+          borderColor: '#f59e0b',
+          backgroundColor: 'rgba(245,158,11,0.08)',
+          borderWidth: 2,
+          pointRadius: 4,
+          pointBackgroundColor: '#f59e0b',
+          pointBorderColor: '#0b0e13',
+          pointBorderWidth: 2,
+          fill: true,
+          tension: 0.35,
+          borderDash: [0],
+        },
+        {
+          label: 'Last actual',
+          data: actuals,
+          borderColor: '#10b981',
+          backgroundColor: 'transparent',
+          borderWidth: 2,
+          pointRadius: [6, ...Array(data.prices.length).fill(0)],
+          pointBackgroundColor: '#10b981',
+          pointBorderColor: '#0b0e13',
+          pointBorderWidth: 2,
+          fill: false,
+          tension: 0,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#131820',
+          borderColor: 'rgba(255,255,255,0.1)',
+          borderWidth: 1,
+          titleColor: '#6b7a90',
+          bodyColor: '#e8edf5',
+          titleFont: { family: 'Space Mono', size: 11 },
+          bodyFont: { family: 'Space Mono', size: 12 },
+          callbacks: {
+            label: ctx => ctx.parsed.y !== null ? ' $' + ctx.parsed.y.toFixed(2) : ''
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#6b7a90', font: { family: 'Space Mono', size: 10 }, maxRotation: 30 },
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          border: { color: 'rgba(255,255,255,0.07)' }
+        },
+        y: {
+          ticks: {
+            color: '#6b7a90',
+            font: { family: 'Space Mono', size: 10 },
+            callback: v => '$' + v.toFixed(0)
+          },
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          border: { color: 'rgba(255,255,255,0.07)' }
+        }
+      }
+    }
+  });
+}
+
+function renderTable(data) {
+  const last = data.last_actual;
+  let rows = '';
+  data.dates.forEach((date, i) => {
+    const p = data.prices[i];
+    const prev = i === 0 ? last : data.prices[i - 1];
+    const chg = p - prev;
+    const chgPct = (chg / prev * 100);
+    const dir = chg >= 0 ? 'up' : 'down';
+    const arrow = chg >= 0 ? '▲' : '▼';
+    rows += `
+      <tr>
+        <td><span class="day-badge">${dayLabel(i)}</span></td>
+        <td>${fmtDate(date)}</td>
+        <td class="mono">${fmtPrice(p)}</td>
+        <td class="mono change-${dir}">${arrow} ${Math.abs(chg).toFixed(2)}</td>
+        <td class="mono change-${dir}">${chg >= 0 ? '+' : ''}${chgPct.toFixed(2)}%</td>
+      </tr>`;
+  });
+
+  document.getElementById('table-body').innerHTML = `
+    <table>
+      <thead><tr>
+        <th>Day</th><th>Date</th><th>Forecast Price</th><th>Change ($)</th><th>Change (%)</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function renderMetricsCards(metrics) {
+  const order = ['LSTM', 'CNN', 'LightGBM', 'Ensemble'];
+  const colors = { LSTM: '#f59e0b', CNN: '#10b981', LightGBM: '#60a5fa', Ensemble: '#a78bfa' };
+  let cards = '';
+  order.forEach(name => {
+    if (!metrics[name]) return;
+    const m = metrics[name];
+    cards += `
+      <div class="model-card">
+        <div class="model-name" style="color:${colors[name]}">${name}</div>
+        <div class="model-metric-row"><span class="model-metric-key">MAE</span><span class="model-metric-val">$${Number(m.MAE).toFixed(4)}</span></div>
+        <div class="model-metric-row"><span class="model-metric-key">RMSE</span><span class="model-metric-val">$${Number(m.RMSE).toFixed(4)}</span></div>
+        <div class="model-metric-row"><span class="model-metric-key">R²</span><span class="model-metric-val">${Number(m.R2).toFixed(4)}</span></div>
+        <div class="model-metric-row"><span class="model-metric-key">MAPE</span><span class="model-metric-val">${Number(m.MAPE).toFixed(2)}%</span></div>
+      </div>`;
+  });
+  document.getElementById('metrics-body').innerHTML = `<div class="model-grid">${cards}</div>`;
+}
+
+function renderMetricsChart(metrics) {
+  const ctx = document.getElementById('metricsChart').getContext('2d');
+  if (metricsChart) metricsChart.destroy();
+
+  const order = ['LSTM', 'CNN', 'LightGBM', 'Ensemble'];
+  const colors = ['#f59e0b', '#10b981', '#60a5fa', '#a78bfa'];
+  const maes = order.map(n => metrics[n] ? Number(metrics[n].MAE).toFixed(4) : 0);
+  const mapes = order.map(n => metrics[n] ? Number(metrics[n].MAPE).toFixed(2) : 0);
+
+  metricsChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: order,
+      datasets: [
+        {
+          label: 'MAE ($)',
+          data: maes,
+          backgroundColor: colors.map(c => c + '99'),
+          borderColor: colors,
+          borderWidth: 1.5,
+          borderRadius: 4,
+        },
+        {
+          label: 'MAPE (%)',
+          data: mapes,
+          backgroundColor: colors.map(c => c + '33'),
+          borderColor: colors,
+          borderWidth: 1.5,
+          borderRadius: 4,
+          borderDash: [4, 4],
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#131820',
+          borderColor: 'rgba(255,255,255,0.1)',
+          borderWidth: 1,
+          titleColor: '#6b7a90',
+          bodyColor: '#e8edf5',
+          titleFont: { family: 'Space Mono', size: 11 },
+          bodyFont: { family: 'Space Mono', size: 12 },
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#6b7a90', font: { family: 'Space Mono', size: 11 } },
+          grid: { display: false },
+          border: { color: 'rgba(255,255,255,0.07)' }
+        },
+        y: {
+          ticks: { color: '#6b7a90', font: { family: 'Space Mono', size: 10 } },
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          border: { color: 'rgba(255,255,255,0.07)' }
+        }
+      }
+    }
+  });
+}
+
+async function loadAll() {
+  const btn = document.getElementById('btn-refresh');
+  const spin = document.getElementById('spin-icon');
+  btn.disabled = true;
+  spin.classList.add('spinning');
+  setStatus('loading', 'fetching…');
+
+  try {
+    const [forecast, metrics] = await Promise.all([loadForecast(), loadMetrics()]);
+
+    renderSummary(forecast);
+    renderChart(forecast);
+    renderTable(forecast);
+
+    if (metrics && Object.keys(metrics).length) {
+      renderMetricsCards(metrics);
+      renderMetricsChart(metrics);
+    } else {
+      document.getElementById('metrics-body').innerHTML = '<div class="empty-state">No metrics available</div>';
+    }
+
+    setStatus('live', 'live · ' + new Date().toLocaleTimeString());
+  } catch (err) {
+    setStatus('error', 'error');
+    showError(err.message || 'Failed to fetch forecast');
+    console.error(err);
+  } finally {
+    btn.disabled = false;
+    spin.classList.remove('spinning');
+  }
+}
+
+loadAll();
+</script>
+</body>
+</html>
