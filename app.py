@@ -349,12 +349,14 @@ if "forecast" not in st.session_state or refresh:
             forecast     = run_forecast(rows)
             forecast["source"] = source
             st.session_state["forecast"] = forecast
+            st.session_state["rows"]     = rows
             st.session_state["error"]    = None
         except Exception as e:
             st.session_state["error"]    = str(e)
             st.session_state["forecast"] = None
 
 forecast = st.session_state.get("forecast")
+rows     = st.session_state.get("rows", [])
 error    = st.session_state.get("error")
 
 with col_status:
@@ -412,31 +414,69 @@ if forecast:
     st.markdown(f"""<div class="section-title">10-DAY PRICE FORECAST</div>
     <div class="section-sub">{forecast["model"]}</div>""", unsafe_allow_html=True)
 
-    labels    = ["Now"] + [datetime.strptime(d, "%Y-%m-%d").strftime("%a %b %-d") for d in dates]
-    forecasts = [last] + prices
-    actuals   = [last] + [None] * len(prices)
+    # get last 10 actual prices for comparison
+    actual_prices = [row["Price"] for row in rows[-10:]]
+    actual_dates  = []
+    d_act = datetime.today() - timedelta(days=14)
+    while len(actual_dates) < 10:
+        if d_act.weekday() < 5:
+            actual_dates.append(d_act.strftime("%a %b %-d"))
+        d_act += timedelta(days=1)
+
+    forecast_labels = [datetime.strptime(d, "%Y-%m-%d").strftime("%a %b %-d") for d in dates]
+
+    # combine for tight y-axis range
+    all_prices = actual_prices + prices
+    y_min = min(all_prices) * 0.995
+    y_max = max(all_prices) * 1.005
 
     fig = go.Figure()
+
+    # actual prices line
     fig.add_trace(go.Scatter(
-        x=labels, y=forecasts, name="Forecast",
-        line=dict(color="#f59e0b", width=2),
-        fill="tozeroy", fillcolor="rgba(245,158,11,0.08)",
+        x=actual_dates, y=actual_prices, name="Actual",
+        line=dict(color="#10b981", width=2, shape="spline", smoothing=1.3),
+        mode="lines+markers",
+        marker=dict(color="#10b981", size=5, line=dict(color="#0b0e13", width=1)),
+    ))
+
+    # connecting bridge from last actual to first forecast
+    fig.add_trace(go.Scatter(
+        x=[actual_dates[-1], forecast_labels[0]],
+        y=[actual_prices[-1], prices[0]],
+        name="Bridge",
+        line=dict(color="#f59e0b", width=1.5, dash="dot"),
+        mode="lines", showlegend=False,
+    ))
+
+    # forecast line
+    fig.add_trace(go.Scatter(
+        x=forecast_labels, y=prices, name="Forecast",
+        line=dict(color="#f59e0b", width=2.5, shape="spline", smoothing=1.3),
+        fill="tonexty" if False else None,
         mode="lines+markers",
         marker=dict(color="#f59e0b", size=6, line=dict(color="#0b0e13", width=2)),
     ))
+
+    # shaded forecast area
     fig.add_trace(go.Scatter(
-        x=[labels[0]], y=[last], name="Last Actual",
-        mode="markers",
-        marker=dict(color="#10b981", size=10, line=dict(color="#0b0e13", width=2)),
+        x=forecast_labels + forecast_labels[::-1],
+        y=[p * 1.003 for p in prices] + [p * 0.997 for p in prices[::-1]],
+        fill="toself", fillcolor="rgba(245,158,11,0.07)",
+        line=dict(color="rgba(0,0,0,0)"),
+        showlegend=False, hoverinfo="skip",
     ))
+
     fig.update_layout(
         paper_bgcolor="#131820", plot_bgcolor="#131820",
         font=dict(family="Space Mono", color="#6b7a90", size=10),
-        height=300, margin=dict(l=10, r=10, t=10, b=10),
+        height=350, margin=dict(l=10, r=10, t=10, b=10),
         legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color="#e8edf5")),
         xaxis=dict(gridcolor="rgba(255,255,255,0.04)", linecolor="rgba(255,255,255,0.07)"),
-        yaxis=dict(gridcolor="rgba(255,255,255,0.04)", linecolor="rgba(255,255,255,0.07)",
-                   tickprefix="$"),
+        yaxis=dict(
+            gridcolor="rgba(255,255,255,0.04)", linecolor="rgba(255,255,255,0.07)",
+            tickprefix="$", range=[y_min, y_max],
+        ),
         hovermode="x unified",
     )
     st.plotly_chart(fig, use_container_width=True)
@@ -494,12 +534,17 @@ if forecast:
         names = [n for n in order if n in metrics]
         clrs  = [colors[n] for n in names]
 
+        def hex_to_rgba(hex_color, alpha):
+            hex_color = hex_color.lstrip("#")
+            r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+            return f"rgba({r},{g},{b},{alpha})"
+
         fig2 = go.Figure()
         fig2.add_trace(go.Bar(name="MAE ($)", x=names, y=maes,
-            marker_color=[c + "99" for c in clrs],
+            marker_color=[hex_to_rgba(c, 0.6) for c in clrs],
             marker_line_color=clrs, marker_line_width=1.5))
         fig2.add_trace(go.Bar(name="MAPE (%)", x=names, y=mapes,
-            marker_color=[c + "33" for c in clrs],
+            marker_color=[hex_to_rgba(c, 0.2) for c in clrs],
             marker_line_color=clrs, marker_line_width=1.5))
         fig2.update_layout(
             paper_bgcolor="#131820", plot_bgcolor="#131820",
