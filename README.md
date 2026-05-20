@@ -18,3 +18,9 @@ pinned: false
 
 \---
 
+
+
+\# WTI Crude Oil 10-Day Forecast
+
+Ensemble ML model: LSTM + CNN + LightGBM + Ridge
+
